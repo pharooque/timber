@@ -2,10 +2,16 @@
 
 int main(int argc, char const *argv[])
 {
-    sf::VideoMode vm(1920, 1080); // Video mode object
+    sf::VideoMode vm(1920, 1080);   // Video mode object
+    sf::RenderWindow window(vm, "Timber", sf::Style::Fullscreen);   // Render game window
 
-    // Render game window
-    sf::RenderWindow window(vm, "Timber", sf::Style::Fullscreen);
+    sf::Texture textureBackground;  // Texture to hold graphic on the GPU
+    textureBackground.loadFromFile("graphics/background.png");  // Load a graphics into the texture
+
+    sf::Sprite spriteBackground;
+    spriteBackground.setTexture(textureBackground);  // Attaching the texture into a sprite
+
+    spriteBackground.setPosition(0,0);
 
     while (window.isOpen())
     {
@@ -19,13 +25,11 @@ int main(int argc, char const *argv[])
         
         /* Draw the scene */
 
-        // Clear everything from the last frame
-        window.clear();
+        window.clear(); // Clear everything from the last frame
 
-        // Draw game scene here
+        window.draw(spriteBackground);// Draw game scene here
 
-        // Display scene
-        window.display();
+        window.display();   // Display scene
     }
     
 
