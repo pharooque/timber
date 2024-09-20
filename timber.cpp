@@ -52,6 +52,18 @@ int main(int argc, char const *argv[])
 
     sf::Clock clock;                           // Time control variable
 
+    sf::RectangleShape timeBar{};              //Adding the Time bar
+    float timeBarStartwidth{ 400 };
+    float timeBarHeight{ 80 };
+
+    timeBar.setSize( sf::Vector2f(timeBarStartwidth, timeBarHeight) );
+    timeBar.setFillColor( sf::Color::Red );
+    timeBar.setPosition( (1920 / 2) - timeBarStartwidth / 2, 980 );
+
+    sf::Time gameTimeTotal{};
+    float timeRemaining{ 6.0f };
+    float timeBarWidthPerSecond{ timeBarStartwidth / timeRemaining };
+
     bool paused {true};                        // Game pause variable.
 
     int score{0};                              // Drawing text to display.
@@ -90,6 +102,9 @@ int main(int argc, char const *argv[])
         if (sf::Keyboard::isKeyPressed(sf::Keyboard::Enter))
         {
             paused = false;
+
+            score = 0;
+            timeRemaining = 6;                      // Reset time and score
         }
         
         /* Update the scene */
@@ -98,6 +113,24 @@ int main(int argc, char const *argv[])
         {
         
             sf::Time deltaClock { clock.restart() };// Measure time
+
+            timeRemaining -= deltaClock.asSeconds();//Subtract from amount of time remaining
+
+            timeBar.setSize( sf::Vector2f(timeBarWidthPerSecond * timeRemaining, timeBarHeight) );  // Resize the timebar
+
+            if (timeRemaining <= 0.0f)              // if timeout
+            {
+                paused = true;                      // Pause the game
+
+                messageText.setString("Out of time!!!");// Change message shown
+
+                sf::FloatRect textRect = messageText.getLocalBounds();
+                messageText.setOrigin( textRect.left + textRect.width / 2.0f, textRect.top + textRect.height / 2.0f );
+
+                messageText.setPosition( 1920 / 2.0f, 1080 / 2.0f );    //Reposition the text
+
+            }
+            
             
             if (!beeActive)                         // If bee is moving
             {
@@ -213,7 +246,9 @@ int main(int argc, char const *argv[])
 
         window.draw(spriteTree);
         window.draw(spriteBee);
+
         window.draw(scoreText);
+        window.draw(timeBar);
 
         if (paused)
         {
