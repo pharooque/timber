@@ -144,9 +144,26 @@ int main(int argc, char const *argv[])
     float logspeedX{ 1000 };
     float logspeedY{ -1500 };
 
+    bool acceptInput{ false };          // Control player input
+
     while (window.isOpen())
     {
         /* Handle players input */
+
+        sf::Event event;
+
+        while (window.pollEvent(event))
+        {
+            if (event.type == sf::Event::KeyReleased && !paused)
+            {
+                acceptInput = true;
+
+                spriteAxe.setPosition(2000, spriteAxe.getPosition().y); // Hide the axe
+            }
+            
+        }
+        
+
         if (sf::Keyboard::isKeyPressed(sf::Keyboard::Escape))
         {
             window.close();
@@ -158,7 +175,60 @@ int main(int argc, char const *argv[])
 
             score = 0;
             timeRemaining = 6;                      // Reset time and score
+
+            for (auto i = 1; i < NUM_BRANCHES; i++) // Starting in the second positions, make all the branches disappear
+            {
+                branchPositions[i] = side::NONE;
+            }
+
+            spriteRIP.setPosition(675, 2000);       // Making sure gravestone is hidden
+
+            spritePlayer.setPosition(580, 720);     // Move player into position
+            
         }
+
+        if (acceptInput)        // Enable player input
+        {
+            /* code */
+
+            if (sf::Keyboard::isKeyPressed(sf::Keyboard::Right))
+            {
+                playerSide = side::RIGHT;           // Making sure the player is on the right side
+                score ++;
+                timeRemaining += (2 / score) + .15; // Increase time remaining
+
+                spriteAxe.setPosition(AXE_POSITION_RIGHT, spriteAxe.getPosition().y);
+                spritePlayer.setPosition(1200, 720);
+
+                updateBranches(score);              //update the branches
+
+                spriteLog.setPosition(810, 720);    // Set falling log to the left
+                logspeedX = -5000;
+                logActive = true;
+
+                acceptInput = false;
+            }
+            
+            if (sf::Keyboard::isKeyPressed(sf::Keyboard::Left))
+            {
+                playerSide = side::LEFT;           // Keep the player to the left
+                score ++;
+                timeRemaining += (2 / score) + .15; // then increase time remaining
+
+                spriteAxe.setPosition(AXE_POSITION_LEFT, spriteAxe.getPosition().y);
+                spritePlayer.setPosition(580, 720);
+
+                updateBranches(score);              //update the branches
+
+                spriteLog.setPosition(810, 720);    // yeeeeet the falling log
+                logspeedX = 5000;
+                logActive = true;
+
+                acceptInput = false;
+            }
+
+        }
+        
         
         /* Update the scene */
 
@@ -305,9 +375,22 @@ int main(int argc, char const *argv[])
                     branches[i].setPosition(3000, height );
                 }
                 
+            }
+
+            if (logActive)          // Handle the falling log
+            {
+                spriteLog.setPosition
+                (
+                    spriteLog.getPosition().x + (logspeedX * deltaClock.asSeconds()), spriteLog.getPosition().y + (logspeedY * deltaClock.asSeconds())
+                );
+
+                if (spriteLog.getPosition().x < -100 || spriteLog.getPosition().y > 2000) // Has the log reached the right hand edge
+                {
+                    logActive = false;
+                    spriteLog.setPosition(810, 720);
+                }
                 
             }
-            
 
         } // End if paused
 
