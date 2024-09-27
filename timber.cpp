@@ -111,6 +111,38 @@ int main(int argc, char const *argv[])
         branches[i].setOrigin(220, 20);
     }
     
+    sf::Texture texturePlayer;      // Preparing the player
+    texturePlayer.loadFromFile("graphics/player.png");
+    sf::Sprite spritePlayer{};
+    spritePlayer.setTexture(texturePlayer);
+    spritePlayer.setPosition(580, 720);
+
+    side playerSide {side::LEFT};       // Player starts on the left side
+
+    sf::Texture textureRIP{};           // Loading the gravestone asset
+    textureRIP.loadFromFile("graphics/rip.png");
+    sf::Sprite spriteRIP{};
+    spriteRIP.setTexture(textureRIP);
+    spriteRIP.setPosition(600, 860);
+
+    sf::Texture textureAxe{};           // Axe sprite
+    textureAxe.loadFromFile("graphics/axe.png");
+    sf::Sprite spriteAxe{};
+    spriteAxe.setTexture(textureAxe);
+    spriteAxe.setPosition(700, 830);
+
+    const float AXE_POSITION_LEFT{700};  // Aligning the axe with the tree.
+    const float AXE_POSITION_RIGHT{1075};
+
+    sf::Texture textureLog{};           // Falling log texture
+    textureLog.loadFromFile("graphics/log.png");
+    sf::Sprite spriteLog{};
+    spriteLog.setTexture(textureLog);
+    spriteLog.setPosition(810, 720);
+
+    bool logActive{ false };
+    float logspeedX{ 1000 };
+    float logspeedY{ -1500 };
 
     while (window.isOpen())
     {
@@ -296,6 +328,10 @@ int main(int argc, char const *argv[])
 
 
         window.draw(spriteTree);
+        window.draw(spritePlayer);
+        window.draw(spriteAxe);
+        window.draw(spriteLog);
+        window.draw(spriteRIP);
         window.draw(spriteBee);
 
         window.draw(scoreText);
