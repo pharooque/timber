@@ -384,12 +384,26 @@ int main(int argc, char const *argv[])
                     spriteLog.getPosition().x + (logspeedX * deltaClock.asSeconds()), spriteLog.getPosition().y + (logspeedY * deltaClock.asSeconds())
                 );
 
-                if (spriteLog.getPosition().x < -100 || spriteLog.getPosition().y > 2000) // Has the log reached the right hand edge
+                if (spriteLog.getPosition().x < -100 || spriteLog.getPosition().x > 2000) // Has the log reached the right hand edge
                 {
                     logActive = false;
                     spriteLog.setPosition(810, 720);
                 }
                 
+            }
+
+            if (branchPositions[5] == playerSide)   // if branch squishees player
+            {
+                paused = true;
+                acceptInput = false;
+
+                spriteRIP.setPosition(525, 760);    // Draw gravestone and yeet player
+                spritePlayer.setPosition(2000, 660);
+
+                messageText.setString("SQUISHED!!");
+                sf::FloatRect textRect = messageText.getLocalBounds();
+                messageText.setOrigin(textRect.left + textRect.width / 2.0f, textRect.top + textRect.height / 2.0f);
+                messageText.setPosition(1920 / 2.0f, 1080 / 2.0f);
             }
 
         } // End if paused
