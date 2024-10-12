@@ -1,414 +1,329 @@
 #include <sstream>
 #include <SFML/Graphics.hpp>
 #include <random>
+#include <array>
 
-void updateBranches (int seed);
+const int NUM_BRANCHES = 6;
+const int SCREEN_WIDTH = 1920;
+const int SCREEN_HEIGHT = 1080;
 
+enum class side {LEFT, RIGHT, NONE};
 
-const int NUM_BRANCHES { 6 };
-sf::Sprite branches [NUM_BRANCHES];
-
-enum class side { LEFT, RIGHT, NONE };
-side branchPositions [ NUM_BRANCHES ];
-
-int main(int argc, char const *argv[])
+// Game state variables
+struct Timber
 {
-    sf::VideoMode vm(1920, 1080);                                   // Video mode object
-    sf::RenderWindow window(vm, "Timber", sf::Style::Fullscreen);   // Render game window
+    std::array<sf::Sprite, NUM_BRANCHES> branches;
+    std::array<side, NUM_BRANCHES> branchPositions;
+    sf::Sprite player, rip, axe, log;
+    side playerSide = side::LEFT;  // Player starts on the left
+    bool logActive = false;
+    float logspeedX = 1000;
+    float logspeedY = -1500;
+    bool paused = true;  // Game pause variable.
+    int score = 0;
+    float timeRemaining = 6.0f;
+    bool acceptInput = false;
+};
 
-    sf::Texture textureBackground;                                  // Texture to hold graphic on the GPU
-    textureBackground.loadFromFile("graphics/background.png");      // Load a graphics into the texture
+void updateBranches(Timber& game, std::mt19937& gen);
+void setupSprites(Timber& game, const sf::Texture& textureBranch, const sf::Texture& texturePlayer,
+                  const sf::Texture& textureRip, const sf::Texture& textureAxe, const sf::Texture& textureLog);
 
-    sf::Sprite spriteBackground;
-    spriteBackground.setTexture(textureBackground); // Attaching the texture into a sprite
-    spriteBackground.setPosition(0, 0);
+int main()
+{
+    // Render game window
+    sf::RenderWindow window(sf::VideoMode(SCREEN_WIDTH, SCREEN_HEIGHT), "Timber", sf::Style::Fullscreen);
 
-    sf::Texture textureTree;
-    textureTree.loadFromFile("graphics/tree.png");
-    sf::Sprite spriteTree;
-    spriteTree.setTexture(textureTree);
-    spriteTree.setPosition(810, 0);              // Added a tree sprite
+    // Load textures once at the start
+    std::array<sf::Texture, 9> textures;
+    const char* textureFiles[]{"graphics/background.png", "graphics/tree.png", "graphics/bee.png",
+                               "graphics/cloud.png", "graphics/branch.png", "graphics/player.png",
+                               "graphics/rip.png", "graphics/axe.png", "graphics/log.png"};
 
-    sf::Texture textureBee;
-    textureBee.loadFromFile("graphics/bee.png");
-    sf::Sprite spriteBee;
-    spriteBee.setTexture(textureBee);
-    spriteBee.setPosition(0, 800);
+    for (int i = 0; i < textures.size(); ++i)
+    {
+        if (!textures[i].loadFromFile(textureFiles[i]))
+        {
+            // Handle error
+            return 1;
+        }
+    }
+    
+    // Set up sprites
+    sf::Sprite background(textures[0]), tree(textures[1]), bee(textures[2]);
+    std::array<sf::Sprite, 3> clouds;
+    for (auto& cloud : clouds) cloud.setTexture(textures[3]);
 
-    bool beeActive {false};             
-    float beeSpeed {0.0f};                      // The Bee's speed
-
-    sf::Texture textureCloud;
-    textureCloud.loadFromFile("graphics/cloud.png");
-
-    // Loading the cloud texture into 3 different sprites
-    sf::Sprite spriteCloud[3]{sf::Sprite(textureCloud), sf::Sprite(textureCloud), sf::Sprite(textureCloud)};
+    tree.setPosition(810, 0);
+    bee.setPosition(0, 800);
 
     // Positioning the clouds from the left at three different height levels
-    spriteCloud[0].setPosition(0, 0);
-    spriteCloud[1].setPosition(0, 250);
-    spriteCloud[2].setPosition(0, 500);
+    clouds[0].setPosition(0, 0);
+    clouds[1].setPosition(0, 250);
+    clouds[2].setPosition(0, 500);
 
-    bool cloudActive[3] { false, false, false };
-    float cloudSpeed[3] { 0.0f, 0.0f, 0.0f };
+    // Setup game state
+    Timber game;
+    setupSprites(game, textures[4], textures[5], textures[6], textures[7], textures[8]);
 
-    sf::Clock clock;                           // Time control variable
+    // Time bar setup
+    const float timeBarStartWidth = 400;
+    const float timeBarHeight = 80;
+    sf::RectangleShape timeBar({timeBarStartWidth, timeBarHeight});
+    timeBar.setFillColor(sf::Color::Red);
+    timeBar.setPosition((SCREEN_WIDTH / 2) - timeBarStartWidth / 2, 980);
 
-    sf::RectangleShape timeBar{};              //Adding the Time bar
-    float timeBarStartwidth{ 400 };
-    float timeBarHeight{ 80 };
-
-    timeBar.setSize( sf::Vector2f(timeBarStartwidth, timeBarHeight) );
-    timeBar.setFillColor( sf::Color::Red );
-    timeBar.setPosition( (1920 / 2) - timeBarStartwidth / 2, 980 );
-
-    sf::Time gameTimeTotal{};
-    float timeRemaining{ 6.0f };
-    float timeBarWidthPerSecond{ timeBarStartwidth / timeRemaining };
-
-    bool paused {true};                        // Game pause variable.
-
-    int score{0};                              // Drawing text to display.
-    sf::Text messageText;
-    sf::Text scoreText;
-
+    // Setup text
     sf::Font font;
-    font.loadFromFile("fonts/KOMIKAP_.ttf");    // Choosing the font.
+    if (!font.loadFromFile("fonts/KOMIKAP_.ttf"))
+    {
+        // Handle error
+        return 1;
+    }
 
+    // Drawing text
+    sf::Text messageText, scoreText;
     messageText.setFont(font);
     scoreText.setFont(font);
-
-    messageText.setString("Press Enter to Start!"); // Assigning the message to display.
+    messageText.setString("Press Enter to Start!");  // Assigning the message to display
     scoreText.setString("Score = 0");
-
     messageText.setCharacterSize(75);
     scoreText.setCharacterSize(100);
-
     messageText.setFillColor(sf::Color::White);
     scoreText.setFillColor(sf::Color::White);
 
-    sf::FloatRect textRect{ messageText.getLocalBounds()};
+    sf::FloatRect textRect = messageText.getLocalBounds();
     messageText.setOrigin(textRect.left + textRect.width / 2.0f, textRect.top + textRect.height / 2.0f);
-
-    messageText.setPosition( 1920 / 2.0f, 1080 / 2.0f);
+    messageText.setPosition( SCREEN_WIDTH / 2.0f, SCREEN_HEIGHT / 2.0f);
     scoreText.setPosition( 20, 20);
 
-    sf::Texture textureBranch;
-    textureBranch.loadFromFile("graphics/branch.png");
-
-    for (int i = 0; i < NUM_BRANCHES; i++)
-    {
-        branches[i].setTexture(textureBranch);
-        branches[i].setPosition(-2000, -2000);
-
-        branches[i].setOrigin(220, 20);
-    }
+    // setup random number generator
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_real_distribution<> beeHeightDist(500, 1000);
+    std::uniform_real_distribution<> cloudHeightDist(-150, 300);
+    std::uniform_real_distribution<> beeSpeedDist(200, 400);
+    std::uniform_real_distribution<> cloudSpeedDist(0, 200);
     
-    sf::Texture texturePlayer;      // Preparing the player
-    texturePlayer.loadFromFile("graphics/player.png");
-    sf::Sprite spritePlayer{};
-    spritePlayer.setTexture(texturePlayer);
-    spritePlayer.setPosition(580, 720);
+    // Initialize sprite speed
+    float beeSpeed = beeSpeedDist(gen);
+    std::array<float, 3> cloudSpeed;
+    for (auto& speed : cloudSpeed) speed = cloudSpeedDist(gen);
 
-    side playerSide {side::LEFT};       // Player starts on the left side
+    sf::Clock clock;
 
-    sf::Texture textureRIP{};           // Loading the gravestone asset
-    textureRIP.loadFromFile("graphics/rip.png");
-    sf::Sprite spriteRIP{};
-    spriteRIP.setTexture(textureRIP);
-    spriteRIP.setPosition(600, 860);
-
-    sf::Texture textureAxe{};           // Axe sprite
-    textureAxe.loadFromFile("graphics/axe.png");
-    sf::Sprite spriteAxe{};
-    spriteAxe.setTexture(textureAxe);
-    spriteAxe.setPosition(700, 830);
-
-    const float AXE_POSITION_LEFT{700};  // Aligning the axe with the tree.
-    const float AXE_POSITION_RIGHT{1075};
-
-    sf::Texture textureLog{};           // Falling log texture
-    textureLog.loadFromFile("graphics/log.png");
-    sf::Sprite spriteLog{};
-    spriteLog.setTexture(textureLog);
-    spriteLog.setPosition(810, 720);
-
-    bool logActive{ false };
-    float logspeedX{ 1000 };
-    float logspeedY{ -1500 };
-
-    bool acceptInput{ false };          // Control player input
-
+    // Game loop
     while (window.isOpen())
     {
-        /* Handle players input */
-
         sf::Event event;
-
         while (window.pollEvent(event))
         {
-            if (event.type == sf::Event::KeyReleased && !paused)
+            if (event.type == sf::Event::Closed || (event.type == sf::Event::KeyPressed && event.key.code == sf::Keyboard::Escape))
             {
-                acceptInput = true;
-
-                spriteAxe.setPosition(2000, spriteAxe.getPosition().y); // Hide the axe
+                window.close();
             }
-            
-        }
-        
 
-        if (sf::Keyboard::isKeyPressed(sf::Keyboard::Escape))
-        {
-            window.close();
+            if (event.type == sf::Event::KeyReleased && !game.paused)
+            {
+                game.acceptInput = true;
+                game.axe.setPosition(2000, game.axe.getPosition().y);
+            }
         }
-        
+    
         if (sf::Keyboard::isKeyPressed(sf::Keyboard::Enter))
         {
-            paused = false;
-
-            score = 0;
-            timeRemaining = 6;                      // Reset time and score
-
-            for (auto i = 1; i < NUM_BRANCHES; i++) // Starting in the second positions, make all the branches disappear
+            game.paused = false;
+            game.score = 0;
+            game.timeRemaining = 6;
+            for (int i = 1; i < NUM_BRANCHES; i++)
             {
-                branchPositions[i] = side::NONE;
-            }
+                game.branchPositions[i] = side::NONE;
+            }    
 
-            spriteRIP.setPosition(675, 2000);       // Making sure gravestone is hidden
-
-            spritePlayer.setPosition(580, 720);     // Move player into position
-            
+            // Move player into position and hide gravestone
+            game.rip.setPosition(675, 2000);
+            game.player.setPosition(580, 720);
         }
 
-        if (acceptInput)        // Enable player input
+        // Handle player input
+        if (game.acceptInput)
         {
-            /* code */
-
             if (sf::Keyboard::isKeyPressed(sf::Keyboard::Right))
             {
-                playerSide = side::RIGHT;           // Making sure the player is on the right side
-                score ++;
-                timeRemaining += (2 / score) + .15; // Increase time remaining
-
-                spriteAxe.setPosition(AXE_POSITION_RIGHT, spriteAxe.getPosition().y);
-                spritePlayer.setPosition(1200, 720);
-
-                updateBranches(score);              //update the branches
-
-                spriteLog.setPosition(810, 720);    // Set falling log to the left
-                logspeedX = -5000;
-                logActive = true;
-
-                acceptInput = false;
+                game.playerSide = side::RIGHT;
+                game.score++;
+                game.timeRemaining += (2.0f / game.score) + 0.15f;  // Increase time based on score
+                game.axe.setPosition(1075, game.axe.getPosition().y);
+                game.player.setPosition(1200, 720);
+                updateBranches(game, gen);  // Update the branches
+                game.log.setPosition(810, 720);
+                game.logspeedX = -5000;
+                game.logActive = true;
+                game.acceptInput = false;
             }
-            
-            if (sf::Keyboard::isKeyPressed(sf::Keyboard::Left))
+            else if (sf::Keyboard::isKeyPressed(sf::Keyboard::Left))
             {
-                playerSide = side::LEFT;           // Keep the player to the left
-                score ++;
-                timeRemaining += (2 / score) + .15; // then increase time remaining
+                game.playerSide = side::LEFT;
+                game.score++;
+                game.timeRemaining += (2.0f / game.score) + 0.15f;
+                game.axe.setPosition(700, game.axe.getPosition().y);
+                game.player.setPosition(580, 720);
+                updateBranches(game, gen);
 
-                spriteAxe.setPosition(AXE_POSITION_LEFT, spriteAxe.getPosition().y);
-                spritePlayer.setPosition(580, 720);
-
-                updateBranches(score);              //update the branches
-
-                spriteLog.setPosition(810, 720);    // yeeeeet the falling log
-                logspeedX = 5000;
-                logActive = true;
-
-                acceptInput = false;
+                game.log.setPosition(810, 720);
+                game.logspeedX = 5000;
+                game.logActive = true;
+                game.acceptInput = false;
             }
-
         }
         
-        
-        /* Update the scene */
-
-        if (!paused)
+        if (!game.paused)
         {
-        
-            sf::Time deltaClock { clock.restart() };// Measure time
+            // Update timer
+            sf::Time deltaClock = clock.restart();
+            game.timeRemaining -= deltaClock.asSeconds();
+            
+            float timeBarWidth = (game.timeRemaining / 6.0f) * timeBarStartWidth;
+            timeBar.setSize({timeBarWidth, timeBarHeight});
 
-            timeRemaining -= deltaClock.asSeconds();//Subtract from amount of time remaining
-
-            timeBar.setSize( sf::Vector2f(timeBarWidthPerSecond * timeRemaining, timeBarHeight) );  // Resize the timebar
-
-            if (timeRemaining <= 0.0f)              // if timeout
+            // Update timeout
+            if (game.timeRemaining <= 0.0f)
             {
-                paused = true;                      // Pause the game
-
-                messageText.setString("Out of time!!!");// Change message shown
-
+                game.paused = true;
+                messageText.setString("Out of time!!!");  // Display timeout message
                 sf::FloatRect textRect = messageText.getLocalBounds();
-                messageText.setOrigin( textRect.left + textRect.width / 2.0f, textRect.top + textRect.height / 2.0f );
-
-                messageText.setPosition( 1920 / 2.0f, 1080 / 2.0f );    //Reposition the text
-
+                messageText.setOrigin(textRect.left + textRect.width / 2.0f, textRect.top + textRect.height / 2.0f );
+                messageText.setPosition(SCREEN_WIDTH / 2.0f, SCREEN_WIDTH / 2.0f);
             }
             
-            
-            if (!beeActive)                         // If bee is moving
+            // Update bee
+            if (bee.getPosition().x < -100)
             {
-                srand( (int) time(0) );
-                beeSpeed = (rand() % 200) + 200;    // How fast is the bee?
-
-                srand( (int) time(0) * 10);
-                float height = (rand() % 500) + 500;
-                spriteBee.setPosition(2000, height);// And how high is the bee?
-
-                beeActive = true;
+                beeSpeed = beeSpeedDist(gen);
+                bee.setPosition(2000, beeHeightDist(gen));
             }
             else
             {
-                spriteBee.setPosition
-                (
-                    spriteBee.getPosition().x - (beeSpeed * deltaClock.asSeconds()), spriteBee.getPosition().y
-                );  // move the bee
-
-                if (spriteBee.getPosition().x < -100) // if bee has reached the left screen edge
-                {
-                    beeActive = false;                // Animate new bee next frame
-                } 
+                bee.move(-beeSpeed * deltaClock.asSeconds(), 0);
             }
             
-            for (auto i = 0; i < 3; ++i)
+            // Update clouds
+            for (int i = 0; i < 3; ++i)
             {
-                if (!cloudActive[i])                     // For Cloud 1
+                if (clouds[i].getPosition().x > SCREEN_HEIGHT)
                 {
-                    std::random_device rd;
-                    std::mt19937 gen(rd());
-                    std::uniform_int_distribution<> dist(0, 200);
-                    cloudSpeed[i] = dist(gen);
-                    cloudActive[i] = true;
-                    spriteCloud[i].setPosition(-200, i * 250);
+                    cloudSpeed[i] = cloudSpeedDist(gen);
+                    clouds[i].setPosition(-200, cloudHeightDist(gen));
                 }
                 else
                 {
-                    // move the cloud
-                    spriteCloud[i].move((cloudSpeed[i] * deltaClock.asSeconds()), 0);
-
-                    if (spriteCloud[i].getPosition().x > 1920) // if the cloud has reached the right screen edge
-                    {
-                        cloudActive[i] = false;                // Animate it as a new cloud next frame
-                    } 
+                    clouds[i].move((cloudSpeed[i] * deltaClock.asSeconds()), 0);
                 }
             }
 
-            std::stringstream ss;                       // Updating the score text
-            ss << "Score = " << score;
-            scoreText.setString( ss.str() );
+            // Update the score text
+            std::stringstream ss;
+            ss << "Score = " << game.score;
+            scoreText.setString(ss.str());
 
+            // Update branches
             for (int i = 0; i < NUM_BRANCHES; i++)
             {
                 float height = i * 150;
-                if ( branchPositions[i] == side::LEFT )
+                if (game.branchPositions[i] == side::LEFT)
                 {
-                    branches[i].setPosition(610, height);
-                    branches[i].setRotation(180);
+                    game.branches[i].setPosition(610, height);
+                    game.branches[i].setRotation(180);
                 }
-
-                else if (branchPositions[i] == side::RIGHT)
+                else if (game.branchPositions[i] == side::RIGHT)
                 {
-                    branches[i].setPosition( 1330, height );
-                    branches[i].setRotation(0);
+                    game.branches[i].setPosition(1330, height);
+                    game.branches[i].setRotation(0);
                 }
-
                 else
                 {
-                    branches[i].setPosition(3000, height );
+                    game.branches[i].setPosition(3000, height);
                 }
-                
             }
 
-            if (logActive)          // Handle the falling log
+            // Update yeeted log
+            if (game.logActive)
             {
-                spriteLog.setPosition
-                (
-                    spriteLog.getPosition().x + (logspeedX * deltaClock.asSeconds()), spriteLog.getPosition().y + (logspeedY * deltaClock.asSeconds())
-                );
-
-                if (spriteLog.getPosition().x < -100 || spriteLog.getPosition().x > 2000) // Has the log reached the right hand edge
+                game.log.move(game.logspeedX * deltaClock.asSeconds(), game.logspeedY * deltaClock.asSeconds());
+                if (game.log.getPosition().x < -100 || game.log.getPosition().x > 2000)
                 {
-                    logActive = false;
-                    spriteLog.setPosition(810, 720);
-                }
-                
+                    game.logActive = false;
+                    game.log.setPosition(810, 720);
+                }  
             }
 
-            if (branchPositions[5] == playerSide)   // if branch squishees player
+            // Check if player gets squished
+            if (game.branchPositions[5] == game.playerSide)
             {
-                paused = true;
-                acceptInput = false;
+                game.paused = true;
+                game.acceptInput = false;
 
-                spriteRIP.setPosition(525, 760);    // Draw gravestone and yeet player
-                spritePlayer.setPosition(2000, 660);
-
+                // Replace player with gravestone
+                game.rip.setPosition(525, 760);
+                game.player.setPosition(2000, 660);
                 messageText.setString("SQUISHED!!");
                 sf::FloatRect textRect = messageText.getLocalBounds();
                 messageText.setOrigin(textRect.left + textRect.width / 2.0f, textRect.top + textRect.height / 2.0f);
-                messageText.setPosition(1920 / 2.0f, 1080 / 2.0f);
+                messageText.setPosition(SCREEN_WIDTH / 2.0f, SCREEN_HEIGHT / 2.0f);
             }
 
-        } // End if paused
+        } // End if game.paused
 
-        /* Draw the scene */
+        // Draw game scene
+        window.clear();
+        window.draw(background);
 
-        window.clear();                         // Clear everything from the last frame
-
-        window.draw(spriteBackground);          // Draw game scene here
-
-        for(auto& cloud : spriteCloud) window.draw(cloud);
-        for (auto i = 0; i < NUM_BRANCHES; i++)
-        {
-            window.draw(branches[i]);
-        }
-
-        window.draw(spriteTree);
-        window.draw(spritePlayer);
-        window.draw(spriteAxe);
-        window.draw(spriteLog);
-        window.draw(spriteRIP);
-        window.draw(spriteBee);
+        for(const auto& cloud : clouds) window.draw(cloud);
+        for (const auto& branch : game.branches) window.draw(branch);
+        window.draw(tree);
+        window.draw(game.player);
+        window.draw(game.axe);
+        window.draw(game.log);
+        window.draw(game.rip);
+        window.draw(bee);
 
         window.draw(scoreText);
         window.draw(timeBar);
+        if (game.paused) window.draw(messageText);
 
-        if (paused)
-        {
-            window.draw(messageText);           // Draw the message
-        }
-        
-
-        window.display();                       // Display scene
+        // Display scene
+        window.display();
     }
     
-
     return 0;
 }
 
-void updateBranches(int seed)
+void updateBranches(Timber& game, std::mt19937& gen)
 {
-    for (auto j = NUM_BRANCHES - 1; j > 0; j--)
+    for (int j = NUM_BRANCHES - 1; j > 0; j--)
     {
-        branchPositions[j] = branchPositions[j-1];
+        game.branchPositions[j] = game.branchPositions[j-1];
     }
-    
-    srand((int) time(0) + seed);
-    int r = (rand() % 5);
+    std::uniform_int_distribution<> dist(0, 2);
+    int r = dist(gen);
+    game.branchPositions[0] = (r == 0) ? side::LEFT : (r == 1) ? side::RIGHT : side::NONE;
+}
 
-    switch (r)
+void setupSprites(Timber& game, const sf::Texture& textureBranch, const sf::Texture& texturePlayer,
+                  const sf::Texture& textureRip, const sf::Texture& textureAxe, const sf::Texture& textureLog)
+{
+    for (auto& branch : game.branches)
     {
-    case 0:
-        branchPositions[0] = side::LEFT;
-        break;
-    
-    case 1:
-        branchPositions[1] = side::RIGHT;
-        break;
-    
-    default:
-        branchPositions[0] = side::NONE;
-        break;
+        branch.setTexture(textureBranch);
+        branch.setPosition(-2000, -2000);
+        branch.setOrigin(220, 20);
     }
+    game.player.setTexture(texturePlayer);
+    game.player.setPosition(580, 720);
+    game.rip.setTexture(textureRip);
+    game.rip.setPosition(600, 860);
+    game.axe.setTexture(textureAxe);
+    game.axe.setPosition(700, 830);
+    game.log.setTexture(textureLog);
+    game.log.setPosition(810, 720);
 }
